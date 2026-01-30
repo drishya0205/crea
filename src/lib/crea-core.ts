@@ -1,6 +1,6 @@
-import { supabase } from './supabase';
 import { openai } from './openai';
 import { CreaMode, DialogContext } from '@/types/crea';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * 1. Input Classification: Determine if intent is FACTUAL or STRATEGIC.
@@ -54,7 +54,7 @@ export function calculateConfidence(evidence: any[]): number {
 /**
  * 3. Retrieval Pipeline
  */
-export async function processQuery(query: string, userId: string): Promise<string> {
+export async function processQuery(query: string, userId: string, supabase: SupabaseClient): Promise<string> {
     const mode = await determineMode(query);
     let evidence: any[] = [];
 

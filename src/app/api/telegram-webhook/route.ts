@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { processQuery } from '@/lib/crea-core';
+import { createClient } from '@/lib/supabase/server';
 
 // This would be the public URL where Telegram sends updates
 // https://crea-os.app/api/telegram-webhook
@@ -7,6 +8,7 @@ import { processQuery } from '@/lib/crea-core';
 export async function POST(req: Request) {
     try {
         const update = await req.json();
+        const supabase = await createClient();
 
         // Basic Telegram Update structure
         if (!update.message || !update.message.text) {
@@ -21,7 +23,7 @@ export async function POST(req: Request) {
 
         // Call CREA Core
         // In a real bot, we would assume an authorized user.
-        const responseText = await processQuery(text, userId);
+        const responseText = await processQuery(text, userId, supabase);
 
         // Send response back to Telegram
         // In production: await axios.post(`https://api.telegram.org/bot${TOKEN}/sendMessage`, { chat_id: chatId, text: responseText })

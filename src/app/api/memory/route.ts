@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
     try {
         const { content, metadata } = await req.json();
+        const supabase = await createClient();
 
         if (!content) {
             return NextResponse.json({ error: 'Content is required' }, { status: 400 });
@@ -21,14 +22,13 @@ export async function POST(req: Request) {
 
         // 2. Save to Supabase
         // We'll store it in 'memory_fragments'
-        // id, source_type, source_id, content_text, embedding, metadata
+        // id, source_type, content, embedding, metadata
         const { data, error } = await supabase
             .from('memory_fragments')
             .insert([
                 {
                     source_type: 'manual_entry',
-                    source_id: 'user_dashboard', // or user uuid
-                    content_text: content,
+                    content: content,
                     embedding: embedding,
                     metadata: metadata || {}
                 }

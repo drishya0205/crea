@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { processQuery } from '@/lib/crea-core';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
     try {
         const { messages, userId } = await req.json();
+        const supabase = await createClient();
 
         if (!messages || !Array.isArray(messages)) {
             return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 });
@@ -18,7 +20,7 @@ export async function POST(req: Request) {
         const uid = userId || '00000000-0000-0000-0000-000000000000'; // Default/Mock ID
 
         // Core Logic
-        const responseText = await processQuery(query, uid);
+        const responseText = await processQuery(query, uid, supabase);
 
         return NextResponse.json({
             role: 'assistant',

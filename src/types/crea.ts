@@ -31,6 +31,10 @@ export interface Task {
     status: TaskStatus;
     priority: 'low' | 'medium' | 'high' | 'urgent';
     due_date?: string;
+    user_id: string; // Foreign Key
+    assignee?: {     // Joined Data
+        username: string;
+    };
 }
 
 export interface Decision {

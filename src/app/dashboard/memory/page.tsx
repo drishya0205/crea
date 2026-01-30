@@ -8,8 +8,7 @@ import { supabase } from '@/lib/supabase';
 interface MemoryFragment {
     id: string;
     source_type: string;
-    source_id: string;
-    content_text: string;
+    content: string;
     metadata: any;
     created_at: string;
 }
@@ -17,6 +16,7 @@ interface MemoryFragment {
 export default function MemoryPage() {
     const [fragments, setFragments] = useState<MemoryFragment[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userId, setUserId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [isAdding, setIsAdding] = useState(false);
 
@@ -27,18 +27,37 @@ export default function MemoryPage() {
         importance: 0.5
     });
 
+    // Get authenticated user (or use temp UUID for dev)
     useEffect(() => {
-        fetchMemories();
+        const getUser = async () => {
+            const { data } = await supabase.auth.getUser();
+            // If no auth user, use a temporary dev UUID
+            const tempUserId = data.user?.id ?? '00000000-0000-0000-0000-000000000000';
+            setUserId(tempUserId);
+        };
+        getUser();
     }, []);
 
+    // Fetch memories when userId is available
+    useEffect(() => {
+        if (userId) fetchMemories();
+    }, [userId]);
+
     const fetchMemories = async () => {
+        if (!userId) return;
+
         setLoading(true);
         // Fetch last 20 memories
         const { data, error } = await supabase
             .from('memory_fragments')
             .select('*')
+            .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(20);
+
+        if (error) {
+            console.error('Fetch memories failed:', error);
+        }
 
         if (data) setFragments(data);
         setLoading(false);
@@ -155,7 +174,7 @@ export default function MemoryPage() {
                         </div>
 
                         <p className="text-white/80 font-serif text-lg leading-relaxed">
-                            "{fragment.content_text}"
+                            "{fragment.content}"
                         </p>
 
                         <div className="mt-4 flex gap-2">

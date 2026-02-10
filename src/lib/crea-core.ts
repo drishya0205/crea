@@ -40,8 +40,9 @@ export function calculateConfidence(evidence: any[]): number {
     for (const item of evidence) {
         if (item.similarity) {
             // Vector result
-            if (item.similarity > 0.82) score += 0.5; // Strong match
-            else if (item.similarity > 0.75) score += 0.2; // Weak match
+            if (item.similarity > 0.80) score += 0.5; // Strong match
+            else if (item.similarity > 0.70) score += 0.3; // Medium match
+            else if (item.similarity >= 0.60) score += 0.15; // Weak match
         } else {
             // Structured DB result (exact match usually)
             score += 0.8;
@@ -93,7 +94,7 @@ export async function processQuery(query: string, userId: string, supabase: Supa
             // @ts-ignore
             const { data: fragments } = await supabase.rpc('match_memory_fragments', {
                 query_embedding: queryEmbedding,
-                match_threshold: 0.75, // Strict threshold for grounded
+                match_threshold: 0.60, // Relaxed threshold for grounded (was 0.75)
                 match_count: 5,
                 user_id_filter: userId
             });
@@ -118,7 +119,7 @@ export async function processQuery(query: string, userId: string, supabase: Supa
     const confidence = calculateConfidence(evidence);
 
     // --- 4. Logic Gate ---
-    if (mode === 'grounded' && confidence < 0.4) {
+    if (mode === 'grounded' && confidence < 0.3) {
         // The Anti-Hallucination Pledge
         return "I don't have enough information in memory to answer that accurately. I refuse to guess.";
     }

@@ -91,11 +91,35 @@ export default function MemoryPage() {
         }
     };
 
+    const handleSync = async () => {
+        setLoading(true);
+        try {
+            // Pass the current userId so the backend assigns memories correctly
+            const res = await fetch('/api/sync-memory', {
+                method: 'POST',
+                body: JSON.stringify({ userId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`Synced! Added ${data.added} new memories.`);
+                fetchMemories();
+            } else {
+                alert('Sync failed: ' + data.error);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Sync error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="max-w-5xl mx-auto space-y-8">
 
             {/* Header */}
             <div className="flex items-center justify-between">
+
                 <div>
                     <h1 className="text-4xl font-serif text-white mb-2">Cortex Fragments</h1>
                     <p className="text-white/40 font-mono text-xs uppercase tracking-widest">
@@ -119,6 +143,13 @@ export default function MemoryPage() {
                     >
                         <Plus size={16} />
                         {isAdding ? 'Cancel' : 'Log Memory'}
+                    </button>
+                    <button
+                        onClick={handleSync}
+                        className="px-4 py-2 bg-white/10 text-white font-bold uppercase text-xs tracking-widest hover:bg-white/20 transition-colors flex items-center gap-2"
+                    >
+                        <Database size={16} />
+                        Sync Sheets
                     </button>
                 </div>
             </div>
@@ -152,7 +183,7 @@ export default function MemoryPage() {
                                 className="ml-auto px-6 py-2 bg-white/10 hover:bg-mint hover:text-black text-white text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-2"
                             >
                                 <Cpu size={14} />
-                                Vectorize & Save
+                                vectorize & Save
                             </button>
                         </div>
                     </div>
@@ -182,6 +213,11 @@ export default function MemoryPage() {
                             <span className="px-2 py-0.5 border border-white/10 text-[10px] text-white/50 uppercase">
                                 {(fragment.metadata as any)?.type || 'General'}
                             </span>
+                            {(fragment.metadata as any)?.importance && (
+                                <span className="px-2 py-0.5 border border-white/10 text-[10px] text-mint/50 uppercase">
+                                    IMP: {(fragment.metadata as any)?.importance}
+                                </span>
+                            )}
                         </div>
                     </div>
                 ))}

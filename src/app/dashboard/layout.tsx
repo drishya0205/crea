@@ -62,6 +62,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { icon: <Users size={20} />, label: 'Team', href: '/dashboard/team' },
     ];
 
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!mounted) return null;
+
     return (
         <div className="h-screen bg-black text-white selection:bg-blue-500/30 font-sans overflow-hidden">
             <PanelGroup direction="horizontal">

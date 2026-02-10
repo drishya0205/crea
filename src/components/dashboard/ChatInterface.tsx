@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Send, User, Bot, Loader2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -16,6 +17,16 @@ export const ChatInterface = () => {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [mode, setMode] = useState<'grounded' | 'strategic'>('grounded');
+
+    useEffect(() => {
+        const getUser = async () => {
+            const { data } = await supabase.auth.getUser();
+            if (data.user) setUserId(data.user.id);
+        };
+        getUser();
+    }, []);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -33,14 +44,13 @@ export const ChatInterface = () => {
         setIsLoading(true);
 
         try {
-            // Prepare full conversation history for context (optional, or just send last msg)
-            // Our API currently expects { messages, userId }
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     messages: [...messages, userMsg].filter(m => m.role !== 'system'),
-                    userId: 'mock-user-id'
+                    userId: userId || '00000000-0000-0000-0000-000000000000', // Use real ID
+                    mode
                 })
             });
 
@@ -112,13 +122,30 @@ export const ChatInterface = () => {
             </div>
 
             {/* Input Area */}
-            <div className="p-4 bg-zinc-950 border-t border-white/5">
+            <div className="p-4 bg-zinc-950 border-t border-white/5 space-y-4">
+
+                {/* Mode Toggles */}
+                <div className="flex justify-center gap-2">
+                    <button
+                        onClick={() => setMode('grounded')}
+                        className={`px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest transition-all ${mode === 'grounded' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'bg-white/5 text-zinc-500 border border-transparent hover:bg-white/10'}`}
+                    >
+                        Grounded
+                    </button>
+                    <button
+                        onClick={() => setMode('strategic')}
+                        className={`px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest transition-all ${mode === 'strategic' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50' : 'bg-white/5 text-zinc-500 border border-transparent hover:bg-white/10'}`}
+                    >
+                        Strategic
+                    </button>
+                </div>
+
                 <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto">
                     <input
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder="Ask anything... (e.g., 'What is the deadline for Project Alpha?')"
+                        placeholder={`Ask ${mode === 'grounded' ? 'for facts, dates, status...' : 'for ideas, plans, strategy...'}`}
                         className="w-full bg-zinc-900 border border-white/10 rounded-xl py-4 pl-5 pr-12 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
                         disabled={isLoading}
                     />
@@ -130,11 +157,6 @@ export const ChatInterface = () => {
                         <Send size={16} />
                     </button>
                 </form>
-                <div className="text-center mt-2">
-                    <p className="text-[10px] text-zinc-600">
-                        Mode: Assuming <span className="text-zinc-400">Context Aware</span> • AI can make mistakes.
-                    </p>
-                </div>
             </div>
         </div>
     );

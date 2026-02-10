@@ -26,8 +26,8 @@ async function checkMemory() {
     const { data, error } = await supabase
         .from('memory_fragments')
         .select('id, content, created_at, metadata')
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .eq('content', 'gensync')
+        .limit(1);
 
     if (error) {
         console.error('Error:', error);

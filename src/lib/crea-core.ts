@@ -42,7 +42,8 @@ export function calculateConfidence(evidence: any[]): number {
             // Vector result
             if (item.similarity > 0.80) score += 0.5; // Strong match
             else if (item.similarity > 0.70) score += 0.3; // Medium match
-            else if (item.similarity >= 0.60) score += 0.15; // Weak match
+            else if (item.similarity >= 0.60) score += 0.2; // Weak match
+            else if (item.similarity >= 0.45) score += 0.15; // Very weak match (needed for partials)
         } else {
             // Structured DB result (exact match usually)
             score += 0.8;
@@ -55,46 +56,89 @@ export function calculateConfidence(evidence: any[]): number {
 /**
  * 3. Retrieval Pipeline
  */
-export async function processQuery(query: string, userId: string, supabase: SupabaseClient): Promise<string> {
-    const mode = await determineMode(query);
-    let evidence: any[] = [];
+// --- Helper: Analyze Tasks for Tone ---
+async function getTaskAnalysis(userId: string, supabase: SupabaseClient) {
+    const { data: tasks } = await supabase
+        .from('tasks')
+        .select('status')
+        .eq('user_id', userId);
 
-    // Generate embedding for query only once if needed
+    if (!tasks || tasks.length === 0) return { tone: 'Neutral', completionRate: 0, total: 0, done: 0 };
+
+    const total = tasks.length;
+    const done = tasks.filter(t => t.status === 'done').length;
+    const completionRate = done / total;
+
+    // Tone Logic
+    let tone = 'Professional';
+    if (completionRate < 0.3) tone = 'Strict & Strategic (User is behind)';
+    else if (completionRate > 0.7) tone = 'Encouraging & Visionary (User is winning)';
+    else tone = 'Balanced & Tactical';
+
+    return { tone, completionRate, total, done };
+}
+
+// --- Helper: Fetch Company Context ---
+async function getCompanyContext(userId: string, supabase: SupabaseClient) {
+    // Fetch memories that are likely high-level context
+    // We try to match known types or just get high importance items
+    const { data } = await supabase
+        .from('memory_fragments')
+        .select('content, metadata')
+        .eq('user_id', userId)
+        .or('metadata->>type.ilike.aim,metadata->>type.ilike.goal,metadata->>type.ilike.mission,metadata->>type.ilike.company name')
+        .limit(5);
+
+    return data?.map(d => d.content).join('\n') || "No specific company context found.";
+}
+
+export async function processQuery(
+    query: string,
+    userId: string,
+    supabase: SupabaseClient,
+    manualMode?: CreaMode
+): Promise<string> {
+
+    // 1. Determine Mode (Manual Override or Classifier)
+    const mode = manualMode || await determineMode(query);
+
+    // 2. Gather Context (Parallel)
+    const [taskStats, companyContext] = await Promise.all([
+        getTaskAnalysis(userId, supabase),
+        getCompanyContext(userId, supabase)
+    ]);
+
+    let evidence: any[] = [];
     let queryEmbedding = null;
 
-    if (mode === 'grounded' || mode === 'strategic') {
-        try {
-            const emb = await openai.embeddings.create({
-                model: "text-embedding-3-small",
-                input: query,
-            });
-            queryEmbedding = emb.data[0].embedding;
-        } catch (e) {
-            console.error("Embedding generation failed", e);
-        }
+    // Generate embedding
+    try {
+        const emb = await openai.embeddings.create({
+            model: "text-embedding-3-small",
+            input: query,
+        });
+        queryEmbedding = emb.data[0].embedding;
+    } catch (e) {
+        console.error("Embedding failed", e);
     }
 
-    // --- 1. Bucket Selection ---
-
+    // --- 3. Retrieval Pipeline ---
     if (mode === 'grounded') {
-        // Search Structured Data (Tasks, Calendar)
-        // We'll search Tasks by keyword or semantic match if we had full db search.
-        // simpler: fetch recent active tasks
+        // Fetch Tasks (Recent/Active)
         const { data: tasks } = await supabase
             .from('tasks')
             .select('id, title, status, due_date')
             .eq('user_id', userId)
             .neq('status', 'done')
             .limit(10);
-
         if (tasks) evidence.push(...tasks.map(t => ({ ...t, type: 'task' })));
 
-        // Search Vector Memory (Notes, Decisions, Identity)
+        // Fetch Vector Memory
         if (queryEmbedding) {
             // @ts-ignore
             const { data: fragments } = await supabase.rpc('match_memory_fragments', {
                 query_embedding: queryEmbedding,
-                match_threshold: 0.60, // Relaxed threshold for grounded (was 0.75)
+                match_threshold: 0.45, // Lowered to catch 'gensync' (0.51)
                 match_count: 5,
                 user_id_filter: userId
             });
@@ -102,13 +146,12 @@ export async function processQuery(query: string, userId: string, supabase: Supa
         }
 
     } else {
-        // Strategic mode - Search broader context
-        // We assume mostly vector search here
+        // Strategic Mode
         if (queryEmbedding) {
             // @ts-ignore
             const { data: fragments } = await supabase.rpc('match_memory_fragments', {
                 query_embedding: queryEmbedding,
-                match_threshold: 0.60, // Loose threshold for creativity
+                match_threshold: 0.45,
                 match_count: 10,
                 user_id_filter: userId
             });
@@ -119,24 +162,32 @@ export async function processQuery(query: string, userId: string, supabase: Supa
     const confidence = calculateConfidence(evidence);
 
     // --- 4. Logic Gate ---
-    if (mode === 'grounded' && confidence < 0.3) {
-        // The Anti-Hallucination Pledge
+    if (mode === 'grounded' && confidence < 0.25) {
         return "I don't have enough information in memory to answer that accurately. I refuse to guess.";
     }
 
     // --- 5. Generation ---
-
     const systemPrompt = `You are CREA, an AI Chief of Staff.
-Mode: ${mode.toUpperCase()}
+    
+CONTEXT:
+Company Info:
+${companyContext}
+
+Task Status:
+${taskStats.done}/${taskStats.total} tasks completed (${(taskStats.completionRate * 100).toFixed(0)}%).
+Required Tone: ${taskStats.tone}
+
+OPERATING MODE: ${mode.toUpperCase()}
 Confidence: ${confidence.toFixed(2)}
 
-Style:
-- Concise, professional, no fluff.
-- If Mode is GROUNDED: You must ONLY use the provided evidence. Do NOT answer from outside data.
-- If Mode is STRATEGIC: You can use general knowledge plus evidence.
-- Format: Use bullet points for lists.
+INSTRUCTIONS:
+- Adopt the Required Tone immediately.
+- If 'Strict': Be concise, highlight delays, focus on execution.
+- If 'Encouraging': Be visionary, praise progress, focus on growth.
+- Grounded Mode: Only use provided evidence.
+- Strategic Mode: Mix evidence with general wisdom.
 
-Evidence:
+EVIDENCE:
 ${JSON.stringify(evidence, null, 2)}
 `;
 

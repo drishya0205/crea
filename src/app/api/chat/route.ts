@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
     try {
-        const { messages, userId } = await req.json();
+        const { messages, userId, mode } = await req.json();
         const supabase = await createClient();
 
         if (!messages || !Array.isArray(messages)) {
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
         const uid = userId || '00000000-0000-0000-0000-000000000000'; // Default/Mock ID
 
         // Core Logic
-        const responseText = await processQuery(query, uid, supabase);
+        const responseText = await processQuery(query, uid, supabase, mode);
 
         return NextResponse.json({
             role: 'assistant',

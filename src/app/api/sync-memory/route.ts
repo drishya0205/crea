@@ -42,8 +42,22 @@ export async function POST(req: Request) {
 
         // 3. Process Rows
         for (const row of rows) {
-            const [content, type, importance] = row;
+            let [content, type, importance] = row;
             if (!content) continue;
+
+            // Normalize inputs for header check
+            const normContent = content.toString().trim().toLowerCase();
+            const normType = type?.toString().trim().toLowerCase();
+            const normImportance = importance?.toString().trim().toLowerCase();
+
+            // Skip Headers
+            if (normContent === 'company name' || normContent === 'content') continue;
+            if (normType === 'aim' || normType === 'type') continue;
+            if (normImportance === '5 year plan' || normImportance === 'importance') continue;
+
+            content = content.toString().trim();
+            type = type?.toString().trim();
+            importance = importance?.toString().trim();
 
             // Check if exists for THIS user
             const { data: allMatches } = await supabase
